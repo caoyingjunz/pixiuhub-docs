@@ -14,6 +14,7 @@ import (
 
 	"github.com/caoyingjunz/rainbow/cmd/app/config"
 	"github.com/caoyingjunz/rainbow/pkg/util"
+	dockerutil "github.com/caoyingjunz/rainbow/pkg/util/docker"
 )
 
 type BuildController struct {
@@ -57,7 +58,7 @@ func NewBuilderController(cfg config.Config) *BuildController {
 }
 
 func (b *BuildController) Complete() error {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := dockerutil.NewClient()
 	if err != nil {
 		return err
 	}

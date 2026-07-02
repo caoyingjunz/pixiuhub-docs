@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/caoyingjunz/pixiulib/exec"
-	"github.com/docker/docker/api/types"
+	dockerimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"k8s.io/klog/v2"
 
@@ -19,6 +19,7 @@ import (
 	"github.com/caoyingjunz/rainbow/pkg/db/model"
 	rainbowtypes "github.com/caoyingjunz/rainbow/pkg/types"
 	"github.com/caoyingjunz/rainbow/pkg/util"
+	dockerutil "github.com/caoyingjunz/rainbow/pkg/util/docker"
 )
 
 const (
@@ -175,7 +176,7 @@ func (p *PluginController) Validate() error {
 }
 
 func (p *PluginController) doComplete() error {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := dockerutil.NewClient()
 	if err != nil {
 		return err
 	}
@@ -339,7 +340,7 @@ func (p *PluginController) sync(imageToPush string, targetImage string, img conf
 		klog.Infof("即将执行命令(%s)进行同步", cmd)
 	case DockerDriver:
 		klog.Infof("Pulling image: %s", imageToPush)
-		reader, err := p.docker.ImagePull(context.TODO(), imageToPush, types.ImagePullOptions{})
+		reader, err := p.docker.ImagePull(context.TODO(), imageToPush, dockerimage.PullOptions{})
 		if err != nil {
 			klog.Errorf("Failed to pull image %s: %v", imageToPush, err)
 			return fmt.Errorf("failed to pull image %s: %v", imageToPush, err)

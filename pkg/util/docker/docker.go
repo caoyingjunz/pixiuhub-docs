@@ -8,9 +8,13 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/docker/docker/api/types"
+	dockerimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 )
+
+func NewClient() (*client.Client, error) {
+	return client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+}
 
 func LoginDocker(registry, username, password string) error {
 	if registry == "" || username == "" || password == "" {
@@ -80,7 +84,7 @@ func PullImage(image string) error {
 }
 
 func ImageExist(image string) (bool, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := NewClient()
 	if err != nil {
 		return false, err
 	}
@@ -97,19 +101,19 @@ func ImageExist(image string) (bool, error) {
 }
 
 func RemoveImage(image string, force bool) error {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := NewClient()
 	if err != nil {
 		return err
 	}
 	defer cli.Close()
 
-	options := types.ImageRemoveOptions{Force: force}
+	options := dockerimage.RemoveOptions{Force: force}
 	_, err = cli.ImageRemove(context.Background(), image, options)
 	return err
 }
 
 func TagImage(sourceImage, targetImage string) error {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := NewClient()
 	if err != nil {
 		return err
 	}
@@ -119,7 +123,7 @@ func TagImage(sourceImage, targetImage string) error {
 		return err
 	}
 
-	options := types.ImageRemoveOptions{Force: false}
+	options := dockerimage.RemoveOptions{Force: false}
 	_, err = cli.ImageRemove(context.Background(), sourceImage, options)
 	return err
 }
