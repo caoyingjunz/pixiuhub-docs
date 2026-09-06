@@ -45,6 +45,11 @@ func NewServerOptions(configFile string) (*ServerOptions, error) {
 	}, nil
 }
 
+// GetDB 返回已初始化的 gorm 数据库实例（供审计中间件等使用）
+func (o *ServerOptions) GetDB() *gorm.DB {
+	return o.db
+}
+
 // Complete completes all the required options
 func (o *ServerOptions) Complete() error {
 	// 配置文件优先级: 默认配置，环境变量，命令行
@@ -68,8 +73,18 @@ func (o *ServerOptions) Complete() error {
 	// 设置配置默认值
 	o.ComponentConfig.SetDefaults()
 
+	// 启动前校验关键配置（避免以空凭据等弱配置静默运行）
+	if err := o.ComponentConfig.Valid(); err != nil {
+		return err
+	}
+
 	// 注册依赖组件
 	if err := o.register(); err != nil {
+		return err
+	}
+
+	// 首次启动引导：用户表为空时创建初始管理员账号
+	if err := o.bootstrap(); err != nil {
 		return err
 	}
 	// 注册 redis 客户端

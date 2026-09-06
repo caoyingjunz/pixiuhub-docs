@@ -156,7 +156,7 @@ func (p *PluginController) Validate() error {
 		// 检查 kubeadm 的版本是否和 k8s 版本一致
 		kubeadmVersion, err := p.getKubeadmVersion()
 		if err != nil {
-			klog.Error("failed to get kubeadm version: %v", err)
+			klog.Errorf("failed to get kubeadm version: %v", err)
 			return fmt.Errorf("failed to get kubeadm version: %v", err)
 		}
 		if kubeadmVersion != p.KubernetesVersion {
@@ -316,7 +316,30 @@ func (p *PluginController) sync(imageToPush string, targetImage string, img conf
 	switch p.Cfg.Plugin.Driver {
 	case SkopeoDriver:
 		klog.Infof("use skopeo to copying image: %s", targetImage)
-		cmd1 := []string{"skopeo", "login", "-u", p.Registry.Username, "-p", p.Registry.Password, p.Registry.Repository, ">", "/dev/null", "2>&1", "&&", "skopeo", "copy", "docker://" + imageToPush, "docker://" + targetImage}
+
+		// 安全修复：不再使用 sh -c 拼接整串命令（存在命令注入风险），改为参数数组直传
+		// 登录与复制拆分为两个 docker run，skopeo 子命令及其参数均作为 argv 直传，不经 shell 解释
+
+		// 步骤一：skopeo login
+		loginCmd := []string{
+			"docker", "run", "--rm", "--network", "host", "pixiuio/skopeo:1.17.0",
+			"skopeo", "login",
+			"-u", p.Registry.Username,
+			"-p", p.Registry.Password,
+			p.Registry.Repository,
+		}
+		if out, err := p.exec.Command(loginCmd[0], loginCmd[1:]...).CombinedOutput(); err != nil {
+			klog.Errorf("Failed to skopeo login %s: %v, output: %s", p.Registry.Repository, err, string(out))
+			return fmt.Errorf("failed to skopeo login %s: %v %s", p.Registry.Repository, err, string(out))
+		}
+
+		// 步骤二：skopeo copy
+		copyCmd := []string{
+			"docker", "run", "--rm", "--network", "host", "pixiuio/skopeo:1.17.0",
+			"skopeo", "copy",
+			"docker://" + imageToPush,
+			"docker://" + targetImage,
+		}
 
 		// p.Cfg.Plugin.Arch 解析平台架构配置，格式为: 操作系统/架构/变体 (如: linux/amd64/8)
 		// 支持两种格式:
@@ -327,17 +350,17 @@ func (p *PluginController) sync(imageToPush string, targetImage string, img conf
 			targetOS := parts[0]
 			arch := parts[1]
 
-			cmd1 = append(cmd1, "--override-os", targetOS)
-			cmd1 = append(cmd1, "--override-arch", arch)
+			copyCmd = append(copyCmd, "--override-os", targetOS)
+			copyCmd = append(copyCmd, "--override-arch", arch)
 
 			if len(parts) >= 3 {
 				variant := parts[2]
-				cmd1 = append(cmd1, "--override-variant", variant)
+				copyCmd = append(copyCmd, "--override-variant", variant)
 			}
 		}
 
-		cmd = []string{"docker", "run", "--network", "host", "pixiuio/skopeo:1.17.0", "sh", "-c", strings.Join(cmd1, " ")}
-		klog.Infof("即将执行命令(%s)进行同步", cmd)
+		klog.Infof("即将执行命令(%v)进行同步", copyCmd)
+		cmd = copyCmd
 	case DockerDriver:
 		klog.Infof("Pulling image: %s", imageToPush)
 		reader, err := p.docker.ImagePull(context.TODO(), imageToPush, dockerimage.PullOptions{})
@@ -499,7 +522,7 @@ func (p *PluginController) SyncImageStatus(target string, status string, msg str
 				"target":      target,
 			})
 		if err == nil {
-			klog.Infof("同步镜像(%d) 状态(%s) 信息(%s) mirror(%s) 成功", p.TaskId, status, msg, target, err)
+			klog.Infof("同步镜像(%d) 状态(%s) 信息(%s) mirror(%s) 成功", p.TaskId, status, msg, target)
 			return
 		}
 

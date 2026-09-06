@@ -1,6 +1,7 @@
 default:
   listen: 8090
-  mode: debug
+  # 运行模式: debug / release
+  mode: release
   push_kubernetes: false
   push_images: false
 
@@ -10,11 +11,17 @@ server:
   harbor:
     url: https://registry.pixiuio.com
     namespace: chartrepo
-    username: admin
-    password: Harbor12345
+    # 敏感凭据建议通过环境变量注入，避免明文入库:
+    #   RAINBOW_HARBOR_USERNAME / RAINBOW_HARBOR_PASSWORD
+    username: ""
+    password: ""
   auth:
-    access_key: access_key
-    secret_key: secret_key
+    # 认证凭据，通过环境变量注入:
+    #   RAINBOW_AUTH_ACCESS_KEY / RAINBOW_AUTH_SECRET_KEY
+    access_key: ""
+    secret_key: ""
+  # JWT 签名密钥（后续登录认证使用），通过环境变量注入: RAINBOW_JWT_KEY
+  jwt_key: ""
 
 # 守护进程
 rainbowd:
@@ -37,8 +44,9 @@ rocketmq:
   group_name: test
   topic: test
   credential:
-    access_key: test
-    secret_key: test
+    # 通过环境变量注入: RAINBOW_ROCKETMQ_ACCESS_KEY / RAINBOW_ROCKETMQ_SECRET_KEY
+    access_key: ""
+    secret_key: ""
 
 plugin:
   callback: http://127.0.0.1:8090
@@ -70,21 +78,24 @@ rate_limit:
 mysql:
   host: peng
   user: root
-  password: Pixiu868686
+  # 通过环境变量注入: RAINBOW_MYSQL_PASSWORD
+  password: ""
   port: 3306
   name: rainbow
 
 redis:
   addr: redis:6379
   username: ""
+  # 通过环境变量注入: RAINBOW_REDIS_PASSWORD
   password: ""
   db: 0
 
 registry:
   repository: harbor.cloud.pixiuio.com
   namespace: pixiucloud
-  username: test
-  password: test
+  # 通过环境变量注入: RAINBOW_REGISTRY_USERNAME / RAINBOW_REGISTRY_PASSWORD
+  username: ""
+  password: ""
 
 kubernetes:
   version: v1.23.6

@@ -547,3 +547,17 @@ type PixiuctlDownloadItem struct {
 	Version string   `json:"version"`
 	Items   []string `json:"items"`
 }
+
+// LoginResponse 登录响应
+type LoginResponse struct {
+	Token    string `json:"token"`
+	UserId   string `json:"user_id"`
+	UserName string `json:"user_name"`
+	Role     int    `json:"role"`
+}
+
+// AccessResponse 创建 AK/SK 响应（明文 SK 仅创建时返回一次）
+type AccessResponse struct {
+	AccessKey string `json:"access_key"`
+	SecretKey string `json:"secret_key"`
+}

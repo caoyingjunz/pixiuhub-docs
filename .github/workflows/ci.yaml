@@ -1,40 +1,47 @@
 name: Tests
 
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - master
+  pull_request:
 
 env:
-  GO_VERSION: '1.17'
+  GO_VERSION: '1.25'
 
 jobs:
-  markdown-lint:
-    runs-on: ubuntu-latest
-    container: node:14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-#      - name: Install mdl
-#        run: apt update && apt-get install ruby-full -y && gem install chef-utils -v 16.6.14 && gem install mdl -v 0.11.0
-#
-#      - name: Lint markdown files
-#        run: find  ./ -name  "*.md" | grep -v '.github' | xargs mdl -r ~MD001,~MD004,~MD005,~MD006,~MD007,~MD010,~MD013,~MD022,~MD023,~MD024,~MD025,~MD029,~MD031,~MD032,~MD033,~MD034,~MD036
-
   golang-lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: true
+        uses: actions/checkout@v4
 
       - name: Set up Golang
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Run go fmt test
         run: hack/verify-gofmt.sh
-        env:
-          GO111MODULE: auto
+
+      - name: Build all binaries
+        # cmd/ 下为多个独立 main 文件（server/agent/builder/plugin/pixiuctl），需逐个构建
+        run: |
+          for f in cmd/*.go; do
+            echo "building $f"
+            go build -o /dev/null "$f"
+          done
+
+      - name: Run go vet（排除 cmd 多 main 包）
+        run: go vet $(go list ./... | grep -v 'github.com/caoyingjunz/rainbow/cmd$')
+
+      - name: Run unit tests
+        run: go test $(go list ./... | grep -v 'github.com/caoyingjunz/rainbow/cmd$')
+
+      - name: Run golangci-lint（含 gosec 安全扫描）
+        uses: golangci/golangci-lint-action@v6
+        with:
+          args: --enable gosec
+
+      - name: Run govulncheck（依赖漏洞扫描）
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest $(go list ./... | grep -v 'github.com/caoyingjunz/rainbow/cmd$')

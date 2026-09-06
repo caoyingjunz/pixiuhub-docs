@@ -12,6 +12,7 @@ import (
 	"github.com/caoyingjunz/pixiulib/httputils"
 	"github.com/caoyingjunz/pixiulib/strutil"
 	"github.com/caoyingjunz/rainbow/pkg/util/lru"
+	"github.com/caoyingjunz/rainbow/pkg/util/tokenutil"
 	"github.com/gin-gonic/gin"
 	"github.com/juju/ratelimit"
 	"golang.org/x/time/rate"
@@ -20,12 +21,26 @@ import (
 	"github.com/caoyingjunz/rainbow/pkg/util/signatureutil"
 )
 
+// userContextKey 登录用户注入 gin context 的 key
+const userContextKey = "login_user"
+
+// GetLoginUser 从 gin context 获取登录用户 claims
+func GetLoginUser(c *gin.Context) *tokenutil.LoginClaims {
+	if v, ok := c.Get(userContextKey); ok {
+		if claims, ok := v.(*tokenutil.LoginClaims); ok {
+			return claims
+		}
+	}
+	return nil
+}
+
 func NewMiddlewares(o *options.ServerOptions) {
 	o.HttpEngine.Use(
 		SignatureMiddleware(o),
 		Authentication(o),
 		UserRateLimiter(o),
 		Limiter(o),
+		Audit(o.GetDB()),
 	)
 }
 
@@ -34,10 +49,11 @@ func SignatureMiddleware(o *options.ServerOptions) gin.HandlerFunc {
 		if isPublicPath(c.Request.URL.Path) {
 			return
 		}
-		// 对 /api/v2 开头的 api 进行签名校验
-		if strings.HasPrefix(c.Request.URL.String(), "/api/v2") {
+		// 对 /api/v2 开头的 api 进行签名校验（携带 Bearer JWT 的浏览器请求跳过，走 JWT 认证）
+		if strings.HasPrefix(c.Request.URL.String(), "/api/v2") &&
+			!strings.HasPrefix(c.GetHeader("Authorization"), "Bearer ") {
 			// 目前仅对 /api/v2 的资源进行签名校验
-			if err := signatureutil.VerifySignature(c, o.Factory); err != nil {
+			if err := signatureutil.VerifySignature(c, o.Factory, o.ComponentConfig.Server.EncryptKey); err != nil {
 				httputils.AbortFailedWithCode(c, http.StatusUnauthorized, err)
 				return
 			}
@@ -51,36 +67,64 @@ func Authentication(o *options.ServerOptions) gin.HandlerFunc {
 	auth := cfg.Server.Auth
 
 	return func(c *gin.Context) {
-		if cfg.Default.Mode == "debug" {
-			return
-		}
-
+		// 安全修复：移除 debug 模式下的鉴权绕过，认证在任何运行模式下均强制生效
 		if isPublicPath(c.Request.URL.Path) {
 			return
 		}
 
-		accessKey := c.GetHeader("accessKey")
-		if accessKey != auth.AccessKey {
-			httputils.AbortFailedWithCode(c, http.StatusUnauthorized, fmt.Errorf("invalid Access Key"))
+		// 支持两种认证方式:
+		// 1. Authorization: Bearer JWT —— 浏览器账号密码登录态（优先识别）
+		// 2. /api/v2 下的 AK/SK 签名 —— pixiuctl CLI 机器间认证（兼容保留）
+		tokenStr := c.GetHeader("Authorization")
+		if strings.HasPrefix(tokenStr, "Bearer ") {
+			token := strings.TrimSpace(strings.TrimPrefix(tokenStr, "Bearer "))
+			claims, err := tokenutil.ParseLoginToken(token, []byte(cfg.Server.JWTKey))
+			if err != nil {
+				httputils.AbortFailedWithCode(c, http.StatusUnauthorized, err)
+				return
+			}
+			// 将登录用户写入 context，供后续业务使用
+			c.Set(userContextKey, claims)
 			return
 		}
 
-		timestamp := c.GetHeader("timestamp")
-		if err := verifyTimeStamp(timestamp); err != nil {
-			httputils.AbortFailedWithCode(c, http.StatusUnauthorized, err)
+		// AK/SK 签名认证（pixiuctl CLI）
+		if strings.HasPrefix(c.Request.URL.Path, "/api/v2") {
+			accessKey := c.GetHeader("accessKey")
+			if accessKey != auth.AccessKey {
+				httputils.AbortFailedWithCode(c, http.StatusUnauthorized, fmt.Errorf("invalid Access Key"))
+				return
+			}
+
+			timestamp := c.GetHeader("timestamp")
+			if err := verifyTimeStamp(timestamp); err != nil {
+				httputils.AbortFailedWithCode(c, http.StatusUnauthorized, err)
+				return
+			}
+
+			signature := c.GetHeader("signature")
+			if !verifySignature(accessKey, auth.SecretKey, signature, timestamp) {
+				httputils.AbortFailedWithCode(c, http.StatusUnauthorized, fmt.Errorf("invalid Signature"))
+				return
+			}
 			return
 		}
 
-		signature := c.GetHeader("signature")
-		if !verifySignature(accessKey, auth.SecretKey, signature, timestamp) {
-			httputils.AbortFailedWithCode(c, http.StatusUnauthorized, fmt.Errorf("invalid Signature"))
-			return
-		}
+		// 非 /api/v2 且无 JWT：未登录
+		httputils.AbortFailedWithCode(c, http.StatusUnauthorized, fmt.Errorf("未登录"))
 	}
 }
 
 func isPublicPath(path string) bool {
-	return strings.HasPrefix(path, "/api/v2/pixiuctls")
+	if strings.HasPrefix(path, "/api/v2/pixiuctls") {
+		return true
+	}
+	// 登录接口为公开路径（无需签名/登录）
+	if strings.HasPrefix(path, "/api/v2/users/login") {
+		return true
+	}
+
+	return false
 }
 
 func verifyTimeStamp(timestamp string) error {

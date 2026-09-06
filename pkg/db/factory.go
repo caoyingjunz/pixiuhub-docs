@@ -31,6 +31,7 @@ type ShareDaoFactory interface {
 	Rainbowd() RainbowdInterface
 	Metrics() MetricsInterface
 	Access() AccessInterface
+	Rbac() RbacInterface
 }
 
 type shareDaoFactory struct {
@@ -47,6 +48,7 @@ func (f *shareDaoFactory) Notify() NotifyInterface     { return newNotify(f.db) 
 func (f *shareDaoFactory) Rainbowd() RainbowdInterface { return newRainbowd(f.db) }
 func (f *shareDaoFactory) Metrics() MetricsInterface   { return newMetrics(f.db) }
 func (f *shareDaoFactory) Access() AccessInterface     { return newAccess(f.db) }
+func (f *shareDaoFactory) Rbac() RbacInterface         { return newRbac(f.db) }
 
 func NewDaoFactory(db *gorm.DB, migrate bool) (ShareDaoFactory, error) {
 	if migrate {

@@ -67,7 +67,7 @@ func (s *ServerController) CreateNotify(ctx context.Context, req *types.CreateNo
 		ShortDesc: req.ShortDesc,
 	})
 	if err != nil {
-		klog.Error("创建推送(%s)记录失败: %v", req.Name, err)
+		klog.Errorf("创建推送(%s)记录失败: %v", req.Name, err)
 	}
 
 	return err

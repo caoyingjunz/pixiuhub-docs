@@ -1,5 +1,10 @@
 package config
 
+import (
+	"fmt"
+	"os"
+)
+
 const (
 	DefaultNormalRateLimitMaxRequests  = 100
 	DefaultSpecialRateLimitMaxRequests = 50
@@ -10,6 +15,22 @@ const (
 
 	defaultRainbowdTemplateDir = "/data/template"
 	defaultDownloadDir         = "/data/pixiuctl"
+)
+
+// 敏感凭据支持的环境变量名：环境变量优先于 config.yaml（用于 Secret 注入，避免明文凭据入库）
+const (
+	EnvHarborUsername   = "RAINBOW_HARBOR_USERNAME"
+	EnvHarborPassword   = "RAINBOW_HARBOR_PASSWORD"
+	EnvMysqlPassword    = "RAINBOW_MYSQL_PASSWORD"
+	EnvRedisPassword    = "RAINBOW_REDIS_PASSWORD"
+	EnvRegistryUsername = "RAINBOW_REGISTRY_USERNAME"
+	EnvRegistryPassword = "RAINBOW_REGISTRY_PASSWORD"
+	EnvRocketmqAK       = "RAINBOW_ROCKETMQ_ACCESS_KEY"
+	EnvRocketmqSK       = "RAINBOW_ROCKETMQ_SECRET_KEY"
+	EnvAuthAccessKey    = "RAINBOW_AUTH_ACCESS_KEY"
+	EnvAuthSecretKey    = "RAINBOW_AUTH_SECRET_KEY"
+	EnvJWTKey           = "RAINBOW_JWT_KEY"
+	EnvEncryptKey       = "RAINBOW_ENCRYPT_KEY"
 )
 
 // SetDefaults 设置配置的默认值
@@ -35,6 +56,46 @@ func (c *Config) SetDefaults() {
 	if len(c.Server.DownloadDir) == 0 {
 		c.Server.DownloadDir = defaultDownloadDir
 	}
+
+	// 环境变量覆盖明文凭据（Secret 注入）
+	c.overrideCredentialsFromEnv()
+}
+
+// overrideCredentialsFromEnv 环境变量优先覆盖 config.yaml 中的敏感凭据
+func (c *Config) overrideCredentialsFromEnv() {
+	setIfEnv := func(env string, dst *string) {
+		if v := os.Getenv(env); len(v) != 0 {
+			*dst = v
+		}
+	}
+
+	setIfEnv(EnvHarborUsername, &c.Server.Harbor.Username)
+	setIfEnv(EnvHarborPassword, &c.Server.Harbor.Password)
+	setIfEnv(EnvMysqlPassword, &c.Mysql.Password)
+	setIfEnv(EnvRedisPassword, &c.Redis.Password)
+	setIfEnv(EnvRegistryUsername, &c.Registry.Username)
+	setIfEnv(EnvRegistryPassword, &c.Registry.Password)
+	setIfEnv(EnvRocketmqAK, &c.Rocketmq.Credential.AccessKey)
+	setIfEnv(EnvRocketmqSK, &c.Rocketmq.Credential.SecretKey)
+	setIfEnv(EnvAuthAccessKey, &c.Server.Auth.AccessKey)
+	setIfEnv(EnvAuthSecretKey, &c.Server.Auth.SecretKey)
+	setIfEnv(EnvJWTKey, &c.Server.JWTKey)
+	setIfEnv(EnvEncryptKey, &c.Server.EncryptKey)
+}
+
+// Valid 启动前校验关键配置，避免以空凭据等弱配置静默运行
+func (c *Config) Valid() error {
+	if c.Default.Mode != "debug" && c.Default.Mode != "release" {
+		return fmt.Errorf("无效的运行模式 mode: %s（仅支持 debug/release）", c.Default.Mode)
+	}
+	if c.Mysql.Host == "" || c.Mysql.User == "" || c.Mysql.Name == "" {
+		return fmt.Errorf("MySQL 配置不完整（host/user/name 不能为空）")
+	}
+	if c.Server.Auth.AccessKey == "" || c.Server.Auth.SecretKey == "" {
+		return fmt.Errorf("认证凭据未配置（建议通过环境变量 %s/%s 注入）", EnvAuthAccessKey, EnvAuthSecretKey)
+	}
+
+	return nil
 }
 
 type Config struct {
@@ -75,6 +136,9 @@ type ServerOption struct {
 	DownloadDir string `yaml:"download_dir"`
 	Auth        Auth   `yaml:"auth"`
 	Harbor      Harbor `yaml:"harbor"`
+	JWTKey      string `yaml:"jwt_key"`
+	// EncryptKey 用于敏感字段（如 AK/SK SecretKey）加密，通过环境变量注入
+	EncryptKey string `yaml:"encrypt_key"`
 }
 
 type RainbowdOption struct {

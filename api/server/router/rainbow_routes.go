@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -994,6 +995,23 @@ func (cr *rainbowRouter) getDailyMetrics(c *gin.Context) {
 	httputils.SetSuccess(c, resp)
 }
 
+func (cr *rainbowRouter) getUserResources(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	claims := GetLoginUser(c)
+	if claims == nil {
+		httputils.SetFailed(c, resp, fmt.Errorf("未登录"))
+		return
+	}
+	var err error
+	if resp.Result, err = cr.c.Server().GetUserResources(c, claims.UserId, claims.Role); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
 func (cr *rainbowRouter) getUserInfoByAccessKey(c *gin.Context) {
 	resp := httputils.NewResponse()
 
@@ -1622,7 +1640,8 @@ func (cr *rainbowRouter) createAccess(c *gin.Context) {
 		httputils.SetFailed(c, resp, err)
 		return
 	}
-	if err = cr.c.Server().CreateAccess(c, &req); err != nil {
+	// 返回创建结果（含一次性明文 SK）
+	if resp.Result, err = cr.c.Server().CreateAccess(c, &req); err != nil {
 		httputils.SetFailed(c, resp, err)
 		return
 	}
@@ -1902,5 +1921,167 @@ func (cr *rainbowRouter) fix(c *gin.Context) {
 		httputils.SetFailed(c, resp, err)
 		return
 	}
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) listRoles(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		listOption types.ListOptions
+		err        error
+	)
+	if err = httputils.ShouldBindAny(c, nil, nil, &listOption); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if resp.Result, err = cr.c.Server().ListRoles(c, listOption); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) createRole(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		req types.CreateRoleRequest
+		err error
+	)
+	if err = httputils.ShouldBindAny(c, &req, nil, nil); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if resp.Result, err = cr.c.Server().CreateRole(c, &req); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) updateRole(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		idMeta types.IdMeta
+		req    types.UpdateRoleRequest
+		err    error
+	)
+	if err = httputils.ShouldBindAny(c, &req, &idMeta, nil); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	req.Id = idMeta.ID
+	if err = cr.c.Server().UpdateRole(c, &req); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) deleteRole(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		idMeta types.IdMeta
+		err    error
+	)
+	if err = httputils.ShouldBindAny(c, nil, &idMeta, nil); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if err = cr.c.Server().DeleteRole(c, idMeta.ID); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) listPermissions(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		listOption types.ListOptions
+		err        error
+	)
+	if err = httputils.ShouldBindAny(c, nil, nil, &listOption); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if resp.Result, err = cr.c.Server().ListPermissions(c, listOption); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) listResources(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		listOption types.ListOptions
+		err        error
+	)
+	if err = httputils.ShouldBindAny(c, nil, nil, &listOption); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if resp.Result, err = cr.c.Server().ListResources(c, listOption); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) assignUserRole(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		idMeta struct {
+			ID string `uri:"Id" binding:"required"`
+		}
+		req struct {
+			RoleId int64 `json:"role_id" binding:"required"`
+		}
+		err error
+	)
+	if err = httputils.ShouldBindAny(c, &req, &idMeta, nil); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if err = cr.c.Server().AssignUserRole(c, idMeta.ID, req.RoleId); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	httputils.SetSuccess(c, resp)
+}
+
+func (cr *rainbowRouter) removeUserRole(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var (
+		idMeta struct {
+			ID     string `uri:"Id" binding:"required"`
+			RoleId int64  `uri:"RoleId" binding:"required"`
+		}
+		err error
+	)
+	if err = httputils.ShouldBindAny(c, nil, &idMeta, nil); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+	if err = cr.c.Server().RemoveUserRole(c, idMeta.ID, idMeta.RoleId); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
 	httputils.SetSuccess(c, resp)
 }

@@ -211,6 +211,7 @@ type (
 	CreateUserRequest struct {
 		Name        string  `json:"name"`
 		UserId      string  `json:"user_id"`
+		Password    string  `json:"password"`  // 创建用户时设置初始密码（bcrypt 存储）
 		UserType    int     `json:"user_type"` // 个人版，专有版
 		PaymentType int     `json:"payment_type"`
 		ExpireTime  *string `json:"expire_time"` // payment_type为 0 时无需设置
@@ -537,4 +538,24 @@ type PageResult struct {
 	Total   int64       `json:"total"`   // 总记录数
 	Items   interface{} `json:"items"`   // 数据列表
 	Message string      `json:"message"` // 正常或异常信息
+}
+
+// LoginRequest 账号密码登录请求
+type LoginRequest struct {
+	Name     string `json:"name" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// CreateRoleRequest 创建角色请求
+type CreateRoleRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	RoleStatus  bool   `json:"role_status"`
+}
+
+// UpdateRoleRequest 更新角色请求
+type UpdateRoleRequest struct {
+	Id          int64  `json:"id" binding:"required"`
+	Description string `json:"description"`
+	RoleStatus  *bool  `json:"role_status"`
 }

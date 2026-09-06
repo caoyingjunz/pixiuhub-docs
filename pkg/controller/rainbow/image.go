@@ -99,7 +99,7 @@ func (s *ServerController) UpdateImageStatus(ctx context.Context, req *types.Upd
 	parts := strings.Split(req.Target, ":")
 	tag := parts[1]
 	if err = s.factory.Image().UpdateTag(ctx, req.ImageId, tag, map[string]interface{}{"status": req.Status, "message": req.Message}); err != nil {
-		klog.Errorf("更新镜像(%d)的版本(%d)状态失败:%v", req.ImageId, tag, err)
+		klog.Errorf("更新镜像(%d)的版本(%s)状态失败:%v", req.ImageId, tag, err)
 		return err
 	}
 
@@ -681,12 +681,12 @@ func (s *ServerController) afterDeleteImageTag(ctx context.Context, image *model
 func (s *ServerController) DeleteImageTag(ctx context.Context, imageId int64, tagId int64) error {
 	err := s.factory.Image().DeleteTag(ctx, tagId)
 	if err != nil {
-		return fmt.Errorf("删除镜像(%d) tag %s 失败:%v", imageId, tagId, err)
+		return fmt.Errorf("删除镜像(%d) tag %d 失败:%v", imageId, tagId, err)
 	}
 
 	delTag, err := s.factory.Image().GetTag(ctx, tagId, true)
 	if err != nil {
-		klog.Errorf("获取已删除镜像(%d)的tag(%s) 失败: %v", imageId, tagId, err)
+		klog.Errorf("获取已删除镜像(%d)的tag(%d) 失败: %v", imageId, tagId, err)
 		return nil
 	}
 	image, err := s.factory.Image().Get(ctx, imageId, false)

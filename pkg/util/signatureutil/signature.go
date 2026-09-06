@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/caoyingjunz/rainbow/pkg/db"
+	encryptutil "github.com/caoyingjunz/rainbow/pkg/util/encryptutil"
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
 )
@@ -40,7 +41,7 @@ func GenerateSignature(params map[string]string, secret []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func VerifySignature(c *gin.Context, f db.ShareDaoFactory) error {
+func VerifySignature(c *gin.Context, f db.ShareDaoFactory, encryptKey string) error {
 	accessKay := c.GetHeader("X-ACCESS-KEY")
 	if len(accessKay) == 0 {
 		return fmt.Errorf("missing AccessKay")
@@ -56,9 +57,20 @@ func VerifySignature(c *gin.Context, f db.ShareDaoFactory) error {
 		return fmt.Errorf("expireTime AccessKay")
 	}
 
+	secretKey := obj.SecretKey
+	// 加密存储的 SecretKey 需先解密后再验签
+	if obj.SecretEncrypted && len(encryptKey) != 0 {
+		if sk, err := encryptutil.Decrypt(secretKey, encryptutil.DeriveKey(encryptKey)); err != nil {
+			klog.Errorf("解密 sk 失败: %v", err)
+			return fmt.Errorf("invalid AccessKay")
+		} else {
+			secretKey = sk
+		}
+	}
+
 	expected := GenerateSignature(
 		map[string]string{"action": "pullOrCacheRepo", "accessKey": accessKay},
-		[]byte(obj.SecretKey))
+		[]byte(secretKey))
 
 	if hmac.Equal([]byte(expected), []byte(c.GetHeader("Authorization"))) {
 		return nil

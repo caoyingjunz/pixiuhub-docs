@@ -638,7 +638,7 @@ func (s *ServerController) DeleteTask(ctx context.Context, taskId int64) error {
 		if err = s.factory.Image().UpdateTag(ctx, tag.ImageId, tag.Name, map[string]interface{}{
 			"task_ids": removeTaskID(tag.TaskIds, fmt.Sprintf("%d", taskId)),
 		}); err != nil {
-			klog.Warningf("移除任务(%s)关联的tag(%s)时失败 %v", taskId, tag.Name, err)
+			klog.Warningf("移除任务(%d)关联的tag(%s)时失败 %v", taskId, tag.Name, err)
 		}
 	}
 

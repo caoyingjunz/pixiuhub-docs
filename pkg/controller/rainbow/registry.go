@@ -32,7 +32,7 @@ func (s *ServerController) CreateRegistry(ctx context.Context, req *types.Create
 
 func (s *ServerController) LoginRegistry(ctx context.Context, req *types.CreateRegistryRequest) error {
 	if err := docker.LoginDocker(req.Repository, req.Username, req.Password); err != nil {
-		klog.Error("登陆镜像仓库 (%s) 失败 %v", req.Repository, err)
+		klog.Errorf("登陆镜像仓库 (%s) 失败 %v", req.Repository, err)
 		return err
 	}
 

@@ -10,7 +10,11 @@ import (
 	"github.com/caoyingjunz/rainbow/pkg/db"
 	"github.com/caoyingjunz/rainbow/pkg/db/model"
 	"github.com/caoyingjunz/rainbow/pkg/types"
+	"github.com/caoyingjunz/rainbow/pkg/util"
 	"github.com/caoyingjunz/rainbow/pkg/util/errors"
+	"github.com/caoyingjunz/rainbow/pkg/util/loginlimit"
+	"github.com/caoyingjunz/rainbow/pkg/util/passwordutil"
+	"github.com/caoyingjunz/rainbow/pkg/util/tokenutil"
 )
 
 func parseTime(t string) (time.Time, error) {
@@ -20,6 +24,68 @@ func parseTime(t string) (time.Time, error) {
 	}
 
 	return pt, nil
+}
+
+// Login 账号密码登录，签发 JWT
+func (s *ServerController) Login(ctx context.Context, req *types.LoginRequest) (*types.LoginResponse, error) {
+	// 用户名维度锁定探测限流
+	if !loginlimit.AllowUserAttempt(req.Name) {
+		return nil, fmt.Errorf("登录尝试过于频繁，请稍后再试")
+	}
+
+	// 按用户名查用户
+	user, err := s.factory.Task().GetUserBy(ctx, db.WithName(req.Name))
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, fmt.Errorf("用户不存在或密码错误")
+		}
+		return nil, fmt.Errorf("查询用户失败: %v", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("用户不存在或密码错误")
+	}
+	// 禁用态拦截
+	if user.Status == model.UserStatusForbidden {
+		return nil, fmt.Errorf("用户已被禁用")
+	}
+	// bcrypt 校验并发闸门（防爆破打满 CPU）
+	if !loginlimit.AcquireVerify() {
+		return nil, fmt.Errorf("登录尝试过于频繁，请稍后再试")
+	}
+	defer loginlimit.ReleaseVerify()
+
+	// 校验密码；失败记录，成功清除
+	if err := passwordutil.ValidatePassword(user.Password, req.Password); err != nil {
+		loginlimit.RecordUserFailure(req.Name)
+		return nil, fmt.Errorf("用户不存在或密码错误")
+	}
+	loginlimit.ClearUserFailures(req.Name)
+
+	// 签发登录 JWT
+	jwtKey := []byte(s.cfg.Server.JWTKey)
+	if len(jwtKey) == 0 {
+		return nil, fmt.Errorf("服务端未配置 jwt_key，无法登录")
+	}
+	token, err := tokenutil.GenerateLoginToken(user.UserId, user.Name, user.Role, jwtKey)
+	if err != nil {
+		return nil, fmt.Errorf("生成登录 token 失败: %v", err)
+	}
+
+	return &types.LoginResponse{
+		Token:    token,
+		UserId:   user.UserId,
+		UserName: user.Name,
+		Role:     user.Role,
+	}, nil
+}
+
+// GetUserResources 当前用户可见资源（用户 → 角色 → 权限 → 资源）
+// 管理员角色返回全部资源；普通用户按 RBAC 映射链查询
+func (s *ServerController) GetUserResources(ctx context.Context, userId string, role int) ([]model.Resource, error) {
+	if role == model.RoleAdmin {
+		return s.factory.Rbac().ListResources(ctx)
+	}
+	return s.factory.Rbac().ListResourcesByUser(ctx, userId)
 }
 
 func (s *ServerController) isUserExist(ctx context.Context, userId string) (bool, error) {
@@ -117,9 +183,30 @@ func (s *ServerController) CreateOrUpdateUsers(ctx context.Context, req *types.C
 }
 
 func (s *ServerController) CreateUser(ctx context.Context, req *types.CreateUserRequest) error {
+	// 安全：初始密码必填，bcrypt 加密存储
+	if len(req.Password) == 0 {
+		return fmt.Errorf("创建用户必须设置初始密码")
+	}
+	hash, err := passwordutil.EncryptPassword(req.Password)
+	if err != nil {
+		klog.Errorf("加密用户密码失败 %v", err)
+		return err
+	}
+
+	userId := req.UserId
+	if len(userId) == 0 {
+		generated, gErr := util.GenerateAK("rainbow")
+		if gErr != nil {
+			return gErr
+		}
+		userId = generated
+	}
+
 	obj := &model.User{
 		Name:        req.Name,
-		UserId:      req.UserId,
+		UserId:      userId,
+		Password:    hash,
+		Status:      model.UserStatusNormal,
 		UserType:    req.UserType,
 		PaymentType: req.PaymentType,
 		Role:        req.Role,

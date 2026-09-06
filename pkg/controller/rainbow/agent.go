@@ -323,7 +323,7 @@ func (s *AgentController) syncActionUsage(ctx context.Context, agent model.Agent
 	}
 
 	rounded := math.Round(grossAmount*1000) / 1000
-	klog.Infof("Agent(%s)当月截止目前已经使用 %d 美金", agent.Name, rounded)
+	klog.Infof("Agent(%s)当月截止目前已经使用 %v 美金", agent.Name, rounded)
 	if agent.GrossAmount == rounded {
 		klog.Infof("agent(%s) 的 grossAmount 未发生变化，等待下一次同步", agent.Name)
 		return nil
@@ -358,7 +358,7 @@ func (s *AgentController) startHeartbeat(ctx context.Context) {
 	for range ticker.C {
 		old, err := s.factory.Agent().GetByName(ctx, s.name)
 		if err != nil {
-			klog.Error("failed to get agent status %v", err)
+			klog.Errorf("failed to get agent status %v", err)
 			continue
 		}
 
@@ -371,7 +371,7 @@ func (s *AgentController) startHeartbeat(ctx context.Context) {
 		}
 
 		if err = s.factory.Agent().UpdateByName(ctx, s.name, updates); err != nil {
-			klog.Error("同步 agent(%s) 心跳失败%v", s.name, err)
+			klog.Errorf("同步 agent(%s) 心跳失败%v", s.name, err)
 		} else {
 			klog.V(2).Infof("同步 agent(%s) 心跳成功 %v", s.name, updates)
 		}
@@ -386,7 +386,7 @@ func (s *AgentController) getNextWorkItems(ctx context.Context) {
 		// 获取未处理
 		tasks, err := s.factory.Task().ListWithAgent(ctx, s.name, 0)
 		if err != nil {
-			klog.Error("failed to list tasks %v", err)
+			klog.Errorf("failed to list tasks %v", err)
 			continue
 		}
 		if len(tasks) == 0 {
@@ -462,7 +462,7 @@ func (s *AgentController) makePluginConfig(ctx context.Context, task model.Task)
 		registry, err = s.factory.Registry().Get(ctx, task.RegisterId)
 	}
 	if err != nil {
-		klog.Error("failed to get registry %v", err)
+		klog.Errorf("failed to get registry %v", err)
 		return nil, fmt.Errorf("failed to get registry %v", err)
 	}
 
@@ -513,7 +513,7 @@ func (s *AgentController) makePluginConfig(ctx context.Context, task model.Task)
 		for _, tag := range tags {
 			name, ok := iNameMap[tag.ImageId]
 			if !ok {
-				klog.Warningf("未能找到镜像(%s)的名称，忽略", tag.ImageId)
+				klog.Warningf("未能找到镜像(%d)的名称，忽略", tag.ImageId)
 				continue
 			}
 			img = append(img, rainbowconfig.Image{

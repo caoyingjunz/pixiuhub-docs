@@ -515,7 +515,7 @@ func (s *ServerController) CreateAgentRepo(ctx context.Context, req *types.CallG
 		klog.Errorf("创建 agent github repo（%s）失败：%v", req.Repo, err)
 		return nil, err
 	}
-	klog.Errorf("创建 agent github repo（%s）成功：%v", req.Repo)
+	klog.Infof("创建 agent github repo（%s）成功", req.Repo)
 	return nil, nil
 }
 
@@ -533,7 +533,7 @@ func (s *ServerController) CreateAgentReposIfNot(ctx context.Context, req *types
 		klog.Errorf("创建 agentRepos（%s）失败：%v", req.Repo, err)
 		return err
 	}
-	klog.Errorf("创建 agentRepo（%s）成功：%v", req.Repo)
+	klog.Infof("创建 agentRepo（%s）成功", req.Repo)
 	return nil
 }
 

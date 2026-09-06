@@ -243,7 +243,7 @@ func (s *ServerController) doSearch(ctx context.Context, clientId string, key st
 	}
 	if sr.StatusCode != 0 {
 		klog.Errorf("doSearch 远程调用失败 %v", err)
-		return nil, fmt.Errorf(sr.ErrMessage)
+		return nil, fmt.Errorf("%s", sr.ErrMessage)
 	}
 
 	return sr.Result, nil
@@ -289,7 +289,7 @@ func (s *ServerController) CallV2(ctx context.Context, clientId string, key stri
 	}
 	if sr.StatusCode != 0 {
 		klog.Errorf("远程调用失败 %v", err)
-		return nil, fmt.Errorf(sr.ErrMessage)
+		return nil, fmt.Errorf("%s", sr.ErrMessage)
 	}
 
 	return sr.Result, nil
@@ -328,7 +328,7 @@ func (s *ServerController) Call(ctx context.Context, clientId string, key string
 	}
 	if sr.StatusCode != 0 {
 		klog.Errorf("远程调用失败 %v", err)
-		return nil, fmt.Errorf(sr.ErrMessage)
+		return nil, fmt.Errorf("%s", sr.ErrMessage)
 	}
 
 	return sr.Result, nil

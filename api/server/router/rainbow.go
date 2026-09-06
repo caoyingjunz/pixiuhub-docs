@@ -1,10 +1,15 @@
 package router
 
 import (
+	"net/http"
+
+	"github.com/caoyingjunz/pixiulib/httputils"
 	"github.com/gin-gonic/gin"
+	"k8s.io/klog/v2"
 
 	"github.com/caoyingjunz/rainbow/cmd/app/options"
 	"github.com/caoyingjunz/rainbow/pkg/controller"
+	"github.com/caoyingjunz/rainbow/pkg/types"
 )
 
 type rainbowRouter struct {
@@ -17,6 +22,28 @@ func NewRouter(o *options.ServerOptions) {
 		c: o.Controller,
 	}
 	s.initRoutes(o.HttpEngine)
+}
+
+// login 账号密码登录，签发 JWT
+func (cr *rainbowRouter) login(c *gin.Context) {
+	resp := httputils.NewResponse()
+
+	var req types.LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	loginResp, err := cr.c.Server().Login(c, &req)
+	if err != nil {
+		klog.Errorf("用户(%s)登录失败: %v", req.Name, err)
+		httputils.SetFailed(c, resp, err)
+		return
+	}
+
+	resp.Result = loginResp
+	httputils.SetSuccess(c, resp)
+	c.Status(http.StatusOK)
 }
 
 func (cr *rainbowRouter) initRoutes(httpEngine *gin.Engine) {
@@ -33,11 +60,34 @@ func (cr *rainbowRouter) initRoutes(httpEngine *gin.Engine) {
 		userRouteV2 := routeV2.Group("/users")
 		{
 			userRouteV2.GET("", cr.getUserInfoByAccessKey)
+			// 账号密码登录，签发 JWT
+			userRouteV2.POST("/login", cr.login)
+			// 当前用户可见资源（菜单/按钮权限）
+			userRouteV2.GET("/resources", cr.getUserResources)
 		}
 
 		registryRouteV2 := routeV2.Group("/registries")
 		{
 			registryRouteV2.GET("", cr.listRegistries)
+		}
+
+		// 角色管理（RBAC）
+		roleRouteV2 := routeV2.Group("/roles")
+		{
+			roleRouteV2.GET("", cr.listRoles)
+			roleRouteV2.POST("", cr.createRole)
+			roleRouteV2.PUT("/:Id", cr.updateRole)
+			roleRouteV2.DELETE("/:Id", cr.deleteRole)
+		}
+
+		// 权限与资源管理（RBAC）
+		permissionRouteV2 := routeV2.Group("/permissions")
+		{
+			permissionRouteV2.GET("", cr.listPermissions)
+		}
+		resourceRouteV2 := routeV2.Group("/resources")
+		{
+			resourceRouteV2.GET("", cr.listResources)
 		}
 
 		// 任务
@@ -212,6 +262,9 @@ func (cr *rainbowRouter) initRoutes(httpEngine *gin.Engine) {
 		userRoute.DELETE("/:Id", cr.deleteUser)
 		userRoute.GET("/:Id", cr.getUser)
 		userRoute.GET("", cr.listUsers)
+		// 用户-角色绑定
+		userRoute.POST("/:Id/roles", cr.assignUserRole)
+		userRoute.DELETE("/:Id/roles/:RoleId", cr.removeUserRole)
 	}
 
 	accessRoute := httpEngine.Group("/rainbow/access")

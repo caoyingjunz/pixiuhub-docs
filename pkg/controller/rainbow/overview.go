@@ -21,23 +21,23 @@ func (s *ServerController) GetCollection(ctx context.Context, listOption types.L
 
 	taskNum, err = s.factory.Task().Count(ctx)
 	if err != nil {
-		klog.Error("获取任务数量失败: %v", err)
+		klog.Errorf("获取任务数量失败: %v", err)
 	}
 	imageNum, err = s.factory.Image().Count(ctx)
 	if err != nil {
-		klog.Error("获取镜像数量失败: %v", err)
+		klog.Errorf("获取镜像数量失败: %v", err)
 	}
 
 	reviews, err := s.factory.Task().ListReview(ctx)
 	if err != nil {
-		klog.Error("获取历史浏览数量失败: %v", err)
+		klog.Errorf("获取历史浏览数量失败: %v", err)
 	}
 	for _, review := range reviews {
 		reviewNum = +review.Count
 	}
 	day, err := s.factory.Task().CountDailyReview(ctx)
 	if err != nil {
-		klog.Error("获取当天浏览数量失败: %v", err)
+		klog.Errorf("获取当天浏览数量失败: %v", err)
 	}
 	reviewNum = reviewNum + day
 

@@ -41,6 +41,25 @@ type ServerInterface interface {
 
 	LoginRegistry(ctx context.Context, req *types.CreateRegistryRequest) error
 
+	// 账号密码登录，签发 JWT
+	Login(ctx context.Context, req *types.LoginRequest) (*types.LoginResponse, error)
+
+	// RBAC：当前用户可见资源（用户 → 角色 → 权限 → 资源）
+	GetUserResources(ctx context.Context, userId string, role int) ([]model.Resource, error)
+
+	// 角色管理
+	CreateRole(ctx context.Context, req *types.CreateRoleRequest) (*model.Role, error)
+	UpdateRole(ctx context.Context, req *types.UpdateRoleRequest) error
+	DeleteRole(ctx context.Context, roleId int64) error
+	ListRoles(ctx context.Context, listOption types.ListOptions) (interface{}, error)
+
+	// 用户-角色绑定
+	AssignUserRole(ctx context.Context, userId string, roleId int64) error
+	RemoveUserRole(ctx context.Context, userId string, roleId int64) error
+	// 权限/资源管理
+	ListPermissions(ctx context.Context, listOption types.ListOptions) (interface{}, error)
+	ListResources(ctx context.Context, listOption types.ListOptions) (interface{}, error)
+
 	CreateTask(ctx context.Context, req *types.CreateTaskRequest) error
 	UpdateTask(ctx context.Context, req *types.UpdateTaskRequest) error
 	ListTasks(ctx context.Context, listOption types.ListOptions) (interface{}, error)
@@ -187,7 +206,7 @@ type ServerInterface interface {
 
 	ListMetrics(ctx context.Context, listOption types.ListOptions) (interface{}, error)
 
-	CreateAccess(ctx context.Context, req *types.CreateAccessRequest) error
+	CreateAccess(ctx context.Context, req *types.CreateAccessRequest) (*types.AccessResponse, error)
 	DeleteAccess(ctx context.Context, ak string) error
 	ListAccesses(ctx context.Context, listOption types.ListOptions) (interface{}, error)
 
@@ -239,7 +258,8 @@ func NewServer(f db.ShareDaoFactory, cfg rainbowconfig.Config, redisClient *redi
 		reg, err := f.Registry().GetDefaultRegistry(context.TODO())
 		if err == nil {
 			if len(reg.Ak) == 0 || len(reg.Sk) == 0 || len(reg.RegionId) == 0 {
-				klog.Errorf("默认华为仓库未设置必要配置, ak(%s) sk(%s) regionId(%s)", reg.Ak, reg.Sk, reg.RegionId)
+				// 安全修复：不在日志中打印明文 AK/SK
+				klog.Errorf("默认华为仓库未设置必要配置, regionId(%s)", reg.RegionId)
 			} else {
 				client, err := huaweicloud.NewHuaweiCloudClient(huaweicloud.HuaweiCloudConfig{
 					AK:       reg.Ak,
@@ -395,7 +415,7 @@ func (s *ServerController) startSubscribeController(ctx context.Context) {
 			}
 
 			if err = s.RunSubscribe(ctx, &types.RunSubscribeRequest{SubscribeId: sub.Id}); err != nil {
-				klog.Error("failed to do Subscribe(%s) %v", sub.Path, err)
+				klog.Errorf("failed to do Subscribe(%s) %v", sub.Path, err)
 				s.CreateSubscribeMessageAndFailTimesAdd(ctx, sub, err.Error())
 			} else {
 				s.CreateSubscribeMessageWithLog(ctx, sub, fmt.Sprintf("%s 在 %v 订阅触发成功", sub.Path, time.Now().Format("2006-01-02 15:04:05")))
@@ -415,7 +435,7 @@ func (s *ServerController) startSyncKubernetesTags(ctx context.Context) {
 	opt := types.CallKubernetesTagRequest{SyncAll: false}
 	for range ticker.C {
 		if _, err := s.SyncKubernetesTags(ctx, &opt); err != nil {
-			klog.Error("failed kubernetes version syncer %v", err)
+			klog.Errorf("failed kubernetes version syncer %v", err)
 		}
 	}
 }
@@ -479,7 +499,7 @@ func (s *ServerController) schedule(ctx context.Context) {
 
 	for range ticker.C {
 		if err := s.doSchedule(ctx); err != nil {
-			klog.Error("failed to do schedule %v", err)
+			klog.Errorf("failed to do schedule %v", err)
 		}
 	}
 }
@@ -662,7 +682,7 @@ func (s *ServerController) startAgentHeartbeat(ctx context.Context) {
 				}
 				err = s.factory.Agent().UpdateByName(ctx, agent.Name, map[string]interface{}{"status": model.UnknownAgentType, "message": "Agent stopped posting status"})
 				if err != nil {
-					klog.Error("failed to sync agent %s status %v", agent.Name, err)
+					klog.Errorf("failed to sync agent %s status %v", agent.Name, err)
 				} else {
 					klog.Infof("agent(%s)被设置成未知", agent.Name)
 				}
